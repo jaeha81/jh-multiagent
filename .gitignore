@@ -27,6 +27,9 @@ tasks/*
 _local/*
 !_local/.gitkeep
 
+# 프로젝트와 무관한 개인 자료 파일
+유튜브영상텍스트자료.md
+
 # 시스템 제공 시드 작업(사용자 사적 데이터 아님) — 추적 유지
 !tasks/audit-kianu/
 !tasks/audit-kianu/task.md

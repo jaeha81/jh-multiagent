@@ -1,0 +1,10 @@
+[mcp_servers.codex]
+command = "codex"
+args = ["mcp-server"]
+
+[mcp_servers.gemini-cli]
+command = "npx"
+args = [
+    "-y",
+    "gemini-mcp-tool",
+]

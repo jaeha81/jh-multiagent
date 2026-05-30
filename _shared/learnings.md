@@ -3,6 +3,15 @@
 작업 완료 후 재사용 가능한 교훈만 추가. append-only.  
 중복·일회성·작업 특화 내용은 기록하지 말 것.
 
+---
+
+## 2026-05-30 — phase1-lifecycle-test (Phase 1 lifecycle 검증)
+
+- **전체 lifecycle 검증 완료**: task 생성 → routing → 승인 → brief → worker 호출 → result 수신 → verification → log 기록 순서가 CLAUDE.md 규칙과 일치함을 확인.
+- **claude-main sub-agent**: Orchestrator가 brief를 prompt로 전달하고 결과 텍스트를 받아 result.md에 기록하는 방식이 정상 동작. 파일 직접 쓰기 없음 확인.
+- **log.md 태그 순서**: DECISION → APPROVAL → WORKER_CALL → VERIFICATION → COMPLETE 순으로 자연스럽게 흐름. 이 순서를 표준 패턴으로 재사용 권장.
+- **Windows selfcheck**: powershell -ExecutionPolicy Bypass -File _shared\run-selfcheck.ps1 명령으로 OK 20/WN 0/NG 0 확인됨. 한글 경로는 UTF-8 BOM + [System.IO.File]::ReadAllText 조합으로 해결됨.
+
 ## 분류 규칙 (어디에 적을지)
 
 - **시스템 운영 자체**에 대한, 어떤 작업에든 적용되는 교훈 → **이 파일** (`_shared/learnings.md`, git 추적·공개).

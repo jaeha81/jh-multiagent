@@ -94,21 +94,26 @@ wc -w tasks/<task>/context.md   # 영문 단어수
 
 직접 쓰기 가능한 worker도 `_shared/`, `_templates/`, 다른 작업 폴더는 쓰지 말 것.
 
-## CLAUDE.md 적용 범위
+## AGENTS.md 적용 범위
 
-이 파일은 **Claude Code를 `~/JH-MultiAgent/` 또는 그 하위에서 실행**할 때만 적용됨.
+이 파일은 **Codex를 `~/JH-MultiAgent/` 또는 그 하위에서 실행**할 때만 적용됨 (Codex의 AGENTS.md 자동 로드 규칙에 따라).
+Orchestrator(Claude Code)의 운영 규칙은 `CLAUDE.md`가 담당. 두 파일은 동일한 운영 규칙을 공유한다.
 
 ```bash
-cd ~/JH-MultiAgent && claude
+# Orchestrator (Claude Code)
+cd D:\ai프로젝트\JH-MultiAgent && claude
+
+# Codex worker 진입점 (codex-main / codex-critic)
+cd D:\ai프로젝트\JH-MultiAgent && codex
 ```
 
 다른 디렉토리에서 실행 시 적용 안 됨 (의도된 격리).  
-전역 `~/.claude/CLAUDE.md`에 포함하지 말 것 — orchestration 규칙이 다른 프로젝트로 새어나감.
+전역 `~/.codex/AGENTS.md`에 포함하지 말 것 — orchestration 규칙이 다른 프로젝트로 새어나감.
 
 ## JH 적응 메모 (D6)
 
 - 새 작업 시작 시 `_shared/config.md` 읽고 `gemini_enabled` 분기. false면 gemini 호출 금지·대체안 질의.
 - gemini 워커 호출은 `mcp__gemini-cli__ask-gemini` 하나(텍스트·`@경로` 파일/이미지 공통, 기본 `gemini-2.5-pro`).
-- `_shared/integrations.md`(옵시디언/버키): 귀속 등록=active, 자동 파일 동기화=inactive, Bucky 작업 지시 인식=active. 자동 동기화·Bucky 워커풀 탑재는 명시 요청 전 실행 금지.
+- `_shared/integrations.md`(옵시디언/버키): 귀속 등록=active, 자동 파일 동기화=inactive, Bucky 작업 지시 인식=active. 연동 명시 요청 전엔 자동 파일 동기화·Bucky 워커풀 탑재는 실행 금지.
 - 로컬 연결: `setup.sh` 참고(인증은 사용자 직접). 자가검증: `powershell -ExecutionPolicy Bypass -File _shared\run-selfcheck.ps1` (Windows 5.1) / `pwsh -File _shared\run-selfcheck.ps1` (PowerShell 7) / `bash _shared/run-selfcheck.sh` (Linux/Mac).
 - 통합 방식 A/B는 `tasks/audit-kianu/`로 시스템이 직접 판정(Phase 2).

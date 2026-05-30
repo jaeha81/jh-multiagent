@@ -23,7 +23,12 @@ BASE = Path(__file__).parent
 TASKS_DIR = BASE / "tasks"
 SHARED_DIR = BASE / "_shared"
 
-console = Console()
+import sys as _sys
+if _sys.platform == "win32":
+    import io as _io
+    _sys.stdout = _io.TextIOWrapper(_sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+console = Console(force_terminal=True)
 
 
 def read_yaml_field(text: str, field: str) -> str:
@@ -107,7 +112,10 @@ def render_tasks(tasks):
 
 def run_cmd(cmd: str) -> tuple[bool, str]:
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            cmd, shell=True, capture_output=True,
+            text=True, encoding="utf-8", errors="replace", timeout=5,
+        )
         out = (r.stdout + r.stderr).strip()[:60]
         return r.returncode == 0, out
     except Exception as e:
@@ -129,21 +137,78 @@ def render_system():
     mcp_path = BASE / ".mcp.json"
     checks.append((".mcp.json", "✅" if mcp_path.exists() else "❌", str(mcp_path) if mcp_path.exists() else "없음"))
 
-    # tasks 폴더
-    checks.append(("tasks/", "✅" if TASKS_DIR.exists() else "❌", str(len(list(TASKS_DIR.iterdir()))) + "개" if TASKS_DIR.exists() else "없음"))
+    # tasks 폴더 (.gitkeep 제외)
+    if TASKS_DIR.exists():
+        task_count = sum(
+            1 for p in TASKS_DIR.iterdir()
+            if p.is_dir() and p.name != ".gitkeep"
+        )
+        checks.append(("tasks/", "✅", f"{task_count}개"))
+    else:
+        checks.append(("tasks/", "❌", "없음"))
 
-    # Obsidian 브레인시스템 귀속
+    # Obsidian 귀속 등록 (_local/brain-system-link.md)
     obsidian_link = BASE / "_local" / "brain-system-link.md"
-    checks.append(("obsidian 귀속", "✅" if obsidian_link.exists() else "⚠️ ", "등록됨" if obsidian_link.exists() else "미등록"))
+    checks.append((
+        "obsidian 귀속 등록",
+        "✅" if obsidian_link.exists() else "⚠️ ",
+        "등록됨" if obsidian_link.exists() else "미등록 (_local/brain-system-link.md 없음)",
+    ))
+
+    # Vault 프로젝트 등록 파일
+    vault_reg = Path(r"G:\내 드라이브\obsidian-agent-brain-system\ObsidianVault\03_Projects\tools\JH-MultiAgent.md")
+    checks.append((
+        "Vault 프로젝트 파일",
+        "✅" if vault_reg.exists() else "⚠️ ",
+        "존재" if vault_reg.exists() else "없음 (Vault 미연결)",
+    ))
 
     table = Table(box=box.SIMPLE, show_header=False, expand=True)
-    table.add_column("항목", style="bold", min_width=18)
+    table.add_column("항목", style="bold", min_width=22)
     table.add_column("상태", justify="center", min_width=4)
     table.add_column("정보")
     for item, icon, info in checks:
         table.add_row(item, icon, info)
 
     return Panel(table, title="⚙️  시스템 점검", border_style="blue")
+
+
+def render_bucky_bridge():
+    """Bucky/Vault bridge 상태를 별도 패널로 표시."""
+    rows = []
+
+    # 귀속 등록 상태
+    brain_link = BASE / "_local" / "brain-system-link.md"
+    rows.append((
+        "귀속 등록",
+        "✅ active" if brain_link.exists() else "⚠️  미등록",
+        str(brain_link) if brain_link.exists() else "_local/brain-system-link.md 없음",
+    ))
+
+    # 자동 파일 동기화
+    rows.append(("자동 파일 동기화", "— inactive", "명시 요청 전 실행 금지"))
+
+    # Bucky 작업 지시 인식
+    rows.append(("Bucky 작업 지시 인식", "✅ active", "Bucky 패킷 수신 시 자동 인식"))
+
+    # vault bridge 스크립트
+    bridge_script = Path(r"G:\내 드라이브\obsidian-agent-brain-system\scripts\obsidian_agent_bridge.py")
+    if bridge_script.exists():
+        ok, out = run_cmd(f'python -X utf8 "{bridge_script}" --status')
+        status_word = out.split(":")[1].split()[0] if ":" in out else ("OK" if ok else "BROKEN")
+        icon = "✅" if status_word == "OK" else ("⚠️ " if status_word == "DEGRADED" else "❌")
+        rows.append(("vault bridge", f"{icon} {status_word}", str(bridge_script)))
+    else:
+        rows.append(("vault bridge", "⚠️  없음", "bridge 스크립트 미설치 (inactive이면 정상)"))
+
+    table = Table(box=box.SIMPLE, show_header=False, expand=True)
+    table.add_column("항목", style="bold", min_width=22)
+    table.add_column("상태", min_width=16)
+    table.add_column("정보", style="dim")
+    for item, state, info in rows:
+        table.add_row(item, state, info)
+
+    return Panel(table, title="🧠 Bucky / Vault Bridge", border_style="magenta")
 
 
 def render_quickstart():
@@ -154,12 +219,33 @@ def render_quickstart():
         "[dim]2.[/] [yellow]claude[/]   [dim]← CLAUDE.md 자동 로드됨[/]",
         "",
         "[bold]태스크 새로 만들기:[/]",
-        "  tasks/ 아래 폴더 생성 → task.md 작성 (_templates/task.md 복사)",
+        "  tasks/ 아래 폴더 생성 → task.md 작성",
+        "  (_templates/task.md 복사)",
         "",
-        "[bold]Obsidian 브레인시스템 귀속 경로:[/]",
-        "  [dim]G:\\내 드라이브\\obsidian-agent-brain-system\\ObsidianVault\\03_Projects\\tools\\JH-MultiAgent.md[/]",
+        "[bold]자가검증 (Windows):[/]",
+        "  [yellow]powershell -ExecutionPolicy Bypass -File _shared\\run-selfcheck.ps1[/]",
+        "",
+        "[bold]Vault 등록 경로:[/]",
+        "  [dim]G:\\내 드라이브\\obsidian-agent-brain-system[/dim]",
+        "  [dim]\\ObsidianVault\\03_Projects\\tools\\JH-MultiAgent.md[/dim]",
     ]
     return Panel("\n".join(lines), title="🚀 빠른 시작", border_style="green")
+
+
+# ── 메뉴 핸들러 (추후 GUI/채팅 확장용 진입점) ────────────────────
+
+MENU_ITEMS = {
+    "r": ("새로고침",       None),        # 재귀 호출로 처리
+    "q": ("종료",          None),
+    # 추후 확장 예시:
+    # "n": ("새 작업 생성", action_new_task),
+    # "l": ("로그 보기",    action_view_log),
+}
+
+
+def render_menu_hint() -> str:
+    parts = [f"[bold]{k}[/]: {v[0]}" for k, v in MENU_ITEMS.items()]
+    return "  |  ".join(parts)
 
 
 def main():
@@ -173,6 +259,10 @@ def main():
     console.print(Columns([sys_panel, qs_panel], equal=True, expand=True))
     console.print()
 
+    # Bucky/Vault bridge 상태
+    console.print(render_bucky_bridge())
+    console.print()
+
     # 태스크 목록
     tasks = load_tasks()
     if tasks:
@@ -181,11 +271,11 @@ def main():
         console.print(Panel("[dim]태스크 없음. tasks/ 폴더에 태스크를 추가하세요.[/]", title="📋 Tasks", border_style="yellow"))
 
     console.print()
-    console.rule("[dim]q: 종료  |  r: 새로고침  |  Enter: 새로고침[/]", style="dim")
+    console.rule(f"[dim]{render_menu_hint()}[/]", style="dim")
 
     try:
-        cmd = console.input("")
-        if cmd.lower() != "q":
+        cmd = console.input("").strip().lower()
+        if cmd != "q":
             main()
     except (KeyboardInterrupt, EOFError):
         console.print("\n[dim]종료[/]")

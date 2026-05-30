@@ -2,7 +2,15 @@
 
 > 이 파일은 평소 작업에서 읽지 않는다(progressive disclosure). 연동 작업을 명시 요청할 때만 로드.
 
-## 귀속 관리 시스템 (활성)
+## Obsidian / Bucky 연동 상태 (3단계)
+
+| 연동 항목 | 상태 | 비고 |
+|---|---|---|
+| 귀속 등록 | **active** | `ObsidianVault/03_Projects/tools/JH-MultiAgent.md` 등록 완료 |
+| 자동 파일 동기화 | **inactive** | `learnings.md → Obsidian` 동기화 미구현. 명시 요청 전 실행 금지 |
+| Bucky 작업 지시 인식 | **active** | Bucky 패킷 수신 시 `project: D:\ai프로젝트\JH-MultiAgent` 명시로 인식 |
+
+**귀속 정보**:
 
 | 항목 | 값 |
 |---|---|
@@ -12,15 +20,14 @@
 | 오케스트레이터 | Bucky (Discord 봇) |
 | 등록일 | 2026-05-30 |
 
-**원칙**: 이 시스템의 작업 지시·상태·기록은 Obsidian Agent Brain System이 관리한다.
-Bucky가 Bucky 패킷으로 작업을 지시할 때 `project: D:\ai프로젝트\JH-MultiAgent`로 명시.
+**Bucky 작업 지시 인식 원칙**: Bucky가 Bucky 패킷으로 작업을 지시할 때 `project: D:\ai프로젝트\JH-MultiAgent`로 명시. Claude Code는 해당 패킷을 수신해 운영 규칙에 따라 처리.
 
-## 향후 훅 (미구현)
+## 향후 훅 (미구현 / inactive)
 
 | 연동 대상 | 방향 | 상태 | 도입 시 주의 |
 |---|---|---|---|
-| JH-브레인시스템 (Obsidian) | learnings.md → Obsidian 메모 동기화 | 미구현 | 단방향(읽기) 우선. 본체 file-as-memory 원칙 깨지 말 것 |
-| 버키 에이전트 | 본 시스템 워커풀에 탑재 | 미구현 | 워커풀 구성 변경 = 전면 재감사 대상(orchestrator-rules §2) |
+| JH-브레인시스템 (Obsidian) | learnings.md → Obsidian 메모 동기화 | **inactive** | 단방향(읽기) 우선. 본체 file-as-memory 원칙 깨지 말 것 |
+| 버키 에이전트 | 본 시스템 워커풀에 탑재 | **inactive** | 워커풀 구성 변경 = 전면 재감사 대상(orchestrator-rules §2) |
 
 ## 연동 금지 원칙 (지금)
 

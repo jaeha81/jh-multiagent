@@ -248,7 +248,7 @@ def render_menu_hint() -> str:
     return "  |  ".join(parts)
 
 
-def main():
+def main(interactive: bool = True):
     console.clear()
     console.rule("[bold blue]JH-MultiAgent 대시보드[/]", style="blue")
     console.print(f"[dim]경로: {BASE}   |   갱신: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/]\n")
@@ -273,13 +273,16 @@ def main():
     console.print()
     console.rule(f"[dim]{render_menu_hint()}[/]", style="dim")
 
+    if not interactive:
+        return
+
     try:
         cmd = console.input("").strip().lower()
         if cmd != "q":
-            main()
+            main(interactive=True)
     except (KeyboardInterrupt, EOFError):
         console.print("\n[dim]종료[/]")
 
 
 if __name__ == "__main__":
-    main()
+    main(interactive="--once" not in sys.argv)

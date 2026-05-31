@@ -52,7 +52,7 @@ while ($true) {
     $choice = Read-Host "Select (1-6)"
     switch ($choice) {
         "1" {
-            Invoke-CheckedCommand "dashboard" "python" @("-X", "utf8", "dashboard.py") | Out-Null
+            [void](Invoke-CheckedCommand "dashboard" "python" @("-X", "utf8", "dashboard.py", "--once"))
             Pause-Launcher
         }
         "2" {
@@ -64,14 +64,14 @@ while ($true) {
             Write-Host "Starting Claude Code orchestrator." -ForegroundColor Green
             Write-Host "New tasks must follow the standard lifecycle and stop before worker calls." -ForegroundColor Yellow
             Write-Host ""
-            Invoke-CheckedCommand "Claude Code" "claude" @() | Out-Null
+            [void](Invoke-CheckedCommand "Claude Code" "claude" @())
             break
         }
         "4" {
             Write-Host ""
             Write-Host "Starting Codex review session." -ForegroundColor Green
             Write-Host ""
-            Invoke-CheckedCommand "Codex" "codex" @() | Out-Null
+            [void](Invoke-CheckedCommand "Codex" "codex" @())
             break
         }
         "5" {

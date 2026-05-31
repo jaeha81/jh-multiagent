@@ -3,7 +3,7 @@
 ## 메타
 
 ```yaml
-status: pending
+status: reviewing
 created: 2026-05-30
 updated: 2026-05-30
 priority: high
@@ -22,15 +22,21 @@ priority: high
 
 ## Acceptance Criteria
 
-- [ ] 판정 기준표 점수화: 완성도 / 멀티벤더 지원 / 미해결 async 블로킹 이슈 / 유지보수비 / 이식 회귀위험
-- [ ] A 또는 B + 근거를 workers 결과로 산출
-- [ ] codex-critic 가 claude-main 분석의 낙관 편향을 적대적으로 검증
+- [x] 판정 기준표 점수화: 완성도 / 멀티벤더 지원 / 미해결 async 블로킹 이슈 / 유지보수비 / 이식 회귀위험
+- [x] A 또는 B + 근거를 workers 결과로 산출 (A 권고, 총점 12/25)
+- [ ] codex-critic 가 claude-main 분석의 낙관 편향을 적대적으로 검증 (미승인)
 - [ ] 사람 최종 승인 라인
 
 ## Worker Plan
 
 ```yaml
-workers_approved: []   # 실행 시 승인 후 기록
+workers_approved:
+  - worker: claude-main
+    approved_at: 2026-05-31
+    purpose: JH-키아누 아키텍처·완성도 분석, 3패턴 이식 타당성 리포트 작성
+    approved_by: user
+    write_scope: none
+  # codex-critic / gemini — 이번 단계 미승인. claude-main 결과 수신 후 재요청.
 planned_workers:
   - role: claude-main
     purpose: JH-키아누 아키텍처·완성도 분석, 3패턴(교차검증/gemini/글자캡) 이식 타당성
@@ -42,8 +48,8 @@ planned_workers:
 
 ## Context Snapshot
 
-<!-- 키아누 경로는 실행 시 사용자에게 질의하여 sources/ 에 경로 기록 -->
-판정 입력: JH-키아누 repo(절대경로 TBD) + 본 시스템 design-basis.md(개념→규칙 매핑).
+target_repo: D:\ai프로젝트\JH-kianu
+판정 입력: JH-키아누 repo + 본 시스템 design-basis.md(개념→규칙 매핑).
 알려진 입력 1건: 키아누의 ClaudeClient.send_message() 동기 클라이언트가 FastAPI 이벤트루프를 블로킹하는 미해결 이슈 → 완성도·async 항목에 반영.
 
 ## Notes

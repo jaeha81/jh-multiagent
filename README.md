@@ -66,6 +66,25 @@ bash _shared/run-selfcheck.sh
 
 ## 사용 시작
 
+Windows PC에서는 `launch.bat`를 더블클릭하거나 아래 명령으로 로컬 런처를 연다.
+
+```powershell
+cd D:\ai프로젝트\JH-MultiAgent
+powershell -ExecutionPolicy Bypass -File .\launch.ps1
+```
+
+런처 메뉴:
+
+| 번호 | 기능 |
+|---|---|
+| 1 | 대시보드 열기 |
+| 2 | 자가검증 실행 |
+| 3 | Claude 오케스트레이터 시작 |
+| 4 | Codex 검수 세션 시작 |
+| 5 | 현재 폴더 열기 |
+
+오케스트레이터를 바로 시작하려면:
+
 ```bash
 cd ~/JH-MultiAgent
 claude

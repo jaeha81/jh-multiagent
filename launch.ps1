@@ -39,27 +39,32 @@ function Invoke-CheckedCommand {
 
 while ($true) {
     Write-Header
-    Write-Host "  [1] Open dashboard" -ForegroundColor White
-    Write-Host "  [2] Run selfcheck" -ForegroundColor White
-    Write-Host "  [3] Start Claude orchestrator" -ForegroundColor White
-    Write-Host "  [4] Start Codex review session" -ForegroundColor White
-    Write-Host "  [5] Open project folder" -ForegroundColor White
-    Write-Host "  [6] Exit" -ForegroundColor White
+    Write-Host "  [1] Open web control panel" -ForegroundColor White
+    Write-Host "  [2] Open terminal dashboard" -ForegroundColor White
+    Write-Host "  [3] Run selfcheck" -ForegroundColor White
+    Write-Host "  [4] Start Claude orchestrator" -ForegroundColor White
+    Write-Host "  [5] Start Codex review session" -ForegroundColor White
+    Write-Host "  [6] Open project folder" -ForegroundColor White
+    Write-Host "  [7] Exit" -ForegroundColor White
     Write-Host ""
     Write-Host "Rule: stop for user approval before any worker call." -ForegroundColor Yellow
     Write-Host ""
 
-    $choice = Read-Host "Select (1-6)"
+    $choice = Read-Host "Select (1-7)"
     switch ($choice) {
         "1" {
-            [void](Invoke-CheckedCommand "dashboard" "python" @("-X", "utf8", "dashboard.py", "--once"))
+            powershell -ExecutionPolicy Bypass -File ".\launch-web.ps1"
             Pause-Launcher
         }
         "2" {
-            powershell -ExecutionPolicy Bypass -File "_shared\run-selfcheck.ps1"
+            [void](Invoke-CheckedCommand "dashboard" "python" @("-X", "utf8", "dashboard.py", "--once"))
             Pause-Launcher
         }
         "3" {
+            powershell -ExecutionPolicy Bypass -File "_shared\run-selfcheck.ps1"
+            Pause-Launcher
+        }
+        "4" {
             Write-Host ""
             Write-Host "Starting Claude Code orchestrator." -ForegroundColor Green
             Write-Host "New tasks must follow the standard lifecycle and stop before worker calls." -ForegroundColor Yellow
@@ -67,17 +72,17 @@ while ($true) {
             [void](Invoke-CheckedCommand "Claude Code" "claude" @())
             break
         }
-        "4" {
+        "5" {
             Write-Host ""
             Write-Host "Starting Codex review session." -ForegroundColor Green
             Write-Host ""
             [void](Invoke-CheckedCommand "Codex" "codex" @())
             break
         }
-        "5" {
+        "6" {
             Start-Process explorer.exe -ArgumentList $Root
         }
-        "6" {
+        "7" {
             break
         }
         default {

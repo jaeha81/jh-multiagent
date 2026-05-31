@@ -53,6 +53,7 @@ if (-not $vaultPath) {
 Write-Host "[ Core Files ]" -ForegroundColor White
 $files = @(
     "CLAUDE.md", "AGENTS.md", "README.md",
+    "web_control_panel.py", "launch-web.ps1", "launch-web-hidden.vbs",
     "_shared/routing.md", "_shared/config.md",
     "_shared/integrations.md", "_shared/learnings.md",
     "_templates/task.md", "_templates/worker-brief.md"

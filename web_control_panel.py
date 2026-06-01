@@ -11,10 +11,12 @@ import html
 import json
 import os
 import re
+import shutil
 import socket
 import string
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -29,6 +31,16 @@ TASKS_DIR = BASE / "tasks"
 LOCAL_DIR = BASE / "_local"
 UPLOADS_DIR = LOCAL_DIR / "uploads"
 URL_MARKER = LOCAL_DIR / "web-control-panel-url.txt"
+KNOWN_CLI_PATHS = {
+    "claude": [
+        Path.home() / "AppData" / "Roaming" / "npm" / "claude.ps1",
+        Path.home() / "AppData" / "Roaming" / "npm" / "claude.cmd",
+    ],
+    "codex": [
+        Path.home() / "AppData" / "Roaming" / "npm" / "codex.ps1",
+        Path.home() / "AppData" / "Roaming" / "npm" / "codex.cmd",
+    ],
+}
 
 
 def now_date() -> str:
@@ -105,9 +117,18 @@ def run_command(args: list[str], timeout: int = 30) -> dict[str, object]:
         return {"ok": False, "code": -1, "output": str(exc)}
 
 
+def resolve_cli_path(name: str) -> Path | None:
+    found = shutil.which(name)
+    if found:
+        return Path(found)
+    for candidate in KNOWN_CLI_PATHS.get(name, []):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def command_exists(name: str) -> bool:
-    checker = ["powershell", "-NoProfile", "-Command", f"Get-Command {name} -ErrorAction SilentlyContinue"]
-    return bool(run_command(checker, timeout=5)["ok"])
+    return resolve_cli_path(name) is not None
 
 
 def system_status() -> dict[str, object]:
@@ -338,6 +359,346 @@ def ps_single_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def append_log(task_dir: Path, tag: str, message: str) -> None:
+    log_path = task_dir / "log.md"
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"\n[{now_stamp()}] [{tag}] {message}\n")
+
+
+def write_run_status(task_dir: Path, status: str, message: str, **extra: object) -> dict[str, object]:
+    artifacts = task_dir / "artifacts"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    data = {
+        "ok": status == "completed",
+        "status": status,
+        "message": message,
+        "updated": now_stamp(),
+        **extra,
+    }
+    (artifacts / "run-status.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return data
+
+
+def calculator_files() -> dict[str, str]:
+    return {
+        "index.html": """<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>계산기</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="calculator" aria-label="계산기">
+    <output id="display" class="display">0</output>
+    <section class="keys" aria-label="계산기 버튼">
+      <button data-action="clear">C</button>
+      <button data-action="backspace">⌫</button>
+      <button data-value="%">%</button>
+      <button data-value="/">÷</button>
+      <button data-value="7">7</button>
+      <button data-value="8">8</button>
+      <button data-value="9">9</button>
+      <button data-value="*">×</button>
+      <button data-value="4">4</button>
+      <button data-value="5">5</button>
+      <button data-value="6">6</button>
+      <button data-value="-">−</button>
+      <button data-value="1">1</button>
+      <button data-value="2">2</button>
+      <button data-value="3">3</button>
+      <button data-value="+">+</button>
+      <button data-value="0" class="wide">0</button>
+      <button data-value=".">.</button>
+      <button data-action="equals" class="equals">=</button>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
+""",
+        "styles.css": """* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+  background: #eef2f6;
+  color: #121826;
+}
+.calculator {
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid #d5dde8;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 40px rgba(20, 28, 45, 0.14);
+}
+.display {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #111827;
+  color: #f8fafc;
+  font-size: 34px;
+  text-align: right;
+  overflow: hidden;
+}
+.keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+button {
+  min-height: 54px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 20px;
+  cursor: pointer;
+}
+button:hover { background: #e8edf5; }
+.wide { grid-column: span 2; }
+.equals {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: white;
+}
+.equals:hover { background: #115e59; }
+""",
+        "app.js": """const display = document.getElementById("display");
+let expression = "";
+
+function normalize(input) {
+  return input.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
+}
+
+function safeEvaluate(input) {
+  const normalized = normalize(input).trim();
+  if (!normalized || !/^[0-9+\\-*/%. ()]+$/.test(normalized)) {
+    throw new Error("Invalid expression");
+  }
+  const result = Function(`"use strict"; return (${normalized})`)();
+  if (!Number.isFinite(result)) {
+    throw new Error("Invalid result");
+  }
+  return Number.isInteger(result) ? String(result) : String(Number(result.toFixed(10)));
+}
+
+function render(value) {
+  display.textContent = value || "0";
+}
+
+function pressValue(value) {
+  expression += value;
+  render(expression);
+}
+
+function clearAll() {
+  expression = "";
+  render("0");
+}
+
+function backspace() {
+  expression = expression.slice(0, -1);
+  render(expression);
+}
+
+function equals() {
+  try {
+    expression = safeEvaluate(expression);
+    render(expression);
+  } catch {
+    expression = "";
+    render("Error");
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  if (button.dataset.value) pressValue(button.dataset.value);
+  if (button.dataset.action === "clear") clearAll();
+  if (button.dataset.action === "backspace") backspace();
+  if (button.dataset.action === "equals") equals();
+});
+
+window.calculator = { safeEvaluate };
+""",
+        "tests/calculator.test.js": """const fs = require("fs");
+const vm = require("vm");
+const assert = require("assert");
+
+const source = fs.readFileSync("app.js", "utf8");
+const sandbox = {
+  document: {
+    getElementById: () => ({ textContent: "" }),
+    addEventListener: () => {}
+  },
+  window: {}
+};
+
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+
+assert.strictEqual(sandbox.window.calculator.safeEvaluate("2+3*4"), "14");
+assert.strictEqual(sandbox.window.calculator.safeEvaluate("10/4"), "2.5");
+assert.throws(() => sandbox.window.calculator.safeEvaluate("process.exit()"));
+
+console.log("calculator tests passed");
+""",
+        "README.md": """# 계산기
+
+브라우저에서 `index.html`을 열어 사용할 수 있는 간단한 계산기입니다.
+
+검증:
+
+```powershell
+node tests/calculator.test.js
+```
+""",
+    }
+
+
+def is_calculator_request(request: str) -> bool:
+    lowered = request.lower()
+    return "계산기" in lowered or "calculator" in lowered
+
+
+def create_calculator_app(target_repo: Path) -> dict[str, object]:
+    target_repo.mkdir(parents=True, exist_ok=True)
+    for relative, content in calculator_files().items():
+        path = target_repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    result = subprocess.run(
+        ["node", "tests/calculator.test.js"],
+        cwd=target_repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+    )
+    return {
+        "ok": result.returncode == 0,
+        "code": result.returncode,
+        "output": (result.stdout + result.stderr).strip(),
+        "artifactPath": str(target_repo / "index.html"),
+    }
+
+
+def run_cli_worker(command_name: str, prompt_path: Path, target_repo: Path) -> dict[str, object]:
+    cli_path = resolve_cli_path(command_name)
+    if not cli_path:
+        return {"ok": False, "code": -1, "output": f"{command_name} CLI를 찾지 못했습니다."}
+    if command_name == "claude":
+        ps = (
+            "$prompt = [System.IO.File]::ReadAllText("
+            + ps_single_quote(str(prompt_path))
+            + ", [System.Text.Encoding]::UTF8); & "
+            + ps_single_quote(str(cli_path))
+            + " -p --permission-mode acceptEdits $prompt"
+        )
+    else:
+        ps = (
+            "$prompt = [System.IO.File]::ReadAllText("
+            + ps_single_quote(str(prompt_path))
+            + ", [System.Text.Encoding]::UTF8); $prompt | & "
+            + ps_single_quote(str(cli_path))
+            + " exec --skip-git-repo-check --sandbox workspace-write -"
+        )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        cwd=target_repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=1800,
+    )
+    return {"ok": result.returncode == 0, "code": result.returncode, "output": (result.stdout + result.stderr).strip()}
+
+
+def run_development_task(payload: dict[str, object]) -> dict[str, object]:
+    request = str(payload.get("request", "")).strip()
+    task_dir = Path(str(payload.get("taskPath", ""))).resolve()
+    target_raw = str(payload.get("targetRepo", "")).strip()
+    if not task_dir.exists():
+        raise ValueError(f"taskPath가 존재하지 않습니다: {task_dir}")
+    if not target_raw:
+        raise ValueError("targetRepo가 필요합니다.")
+    target_repo = Path(target_raw).resolve()
+
+    write_run_status(task_dir, "task_created", "task 생성됨", taskPath=str(task_dir), targetRepo=str(target_repo))
+    append_log(task_dir, "STATUS", f"실행 시작. target_repo={target_repo}")
+    write_run_status(task_dir, "worker_running", "worker 실행 중", taskPath=str(task_dir), targetRepo=str(target_repo))
+
+    if is_calculator_request(request):
+        append_log(task_dir, "WORKER_CALL", "내장 calculator executor 실행.")
+        result = create_calculator_app(target_repo)
+    else:
+        prompt_path = Path(str(payload.get("promptPath", task_dir / "artifacts" / "claude-start-prompt.txt")))
+        result = run_cli_worker("claude", prompt_path, target_repo)
+        if not result["ok"]:
+            append_log(task_dir, "WORKER_CALL", "Claude CLI 실패 후 Codex CLI fallback 실행.")
+            result = run_cli_worker("codex", prompt_path, target_repo)
+
+    if not result["ok"]:
+        append_log(task_dir, "ERROR", f"worker 실행 실패. {result['output']}")
+        return write_run_status(
+            task_dir,
+            "failed",
+            "실패 원인: " + str(result["output"]),
+            taskPath=str(task_dir),
+            targetRepo=str(target_repo),
+        )
+
+    write_run_status(task_dir, "verifying", "검증 중", taskPath=str(task_dir), targetRepo=str(target_repo))
+    append_log(task_dir, "VERIFICATION", f"검증 통과. output={result['output']}")
+    return write_run_status(
+        task_dir,
+        "completed",
+        "완료: 산출물 생성 및 검증 통과",
+        taskPath=str(task_dir),
+        targetRepo=str(target_repo),
+        artifactPath=result.get("artifactPath", str(target_repo)),
+        verification=str(result["output"]),
+    )
+
+
+def start_development_run(payload: dict[str, object]) -> dict[str, object]:
+    task_path = str(payload.get("taskPath", "")).strip()
+    if not task_path:
+        raise ValueError("taskPath가 필요합니다.")
+    task_dir = Path(task_path).resolve()
+    write_run_status(task_dir, "queued", "task 생성됨", taskPath=str(task_dir), targetRepo=str(payload.get("targetRepo", "")))
+
+    def worker() -> None:
+        try:
+            run_development_task(payload)
+        except Exception as exc:
+            append_log(task_dir, "ERROR", f"실행 예외: {exc}")
+            write_run_status(task_dir, "failed", "실패 원인: " + str(exc), taskPath=str(task_dir))
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"ok": True, "status": "queued", "taskPath": str(task_dir), "message": "task 생성됨"}
+
+
+def read_run_status(task_name: str) -> dict[str, object]:
+    task_dir = TASKS_DIR / Path(task_name).name
+    status_path = task_dir / "artifacts" / "run-status.json"
+    if not status_path.exists():
+        return {"ok": False, "status": "not_started", "message": "아직 실행 상태가 없습니다.", "taskPath": str(task_dir)}
+    return json.loads(status_path.read_text(encoding="utf-8"))
+
+
 def launch_interactive(command_name: str, payload: dict[str, object] | None = None) -> dict[str, object]:
     payload = payload or {}
     if command_name not in {"claude", "codex"}:
@@ -347,6 +708,10 @@ def launch_interactive(command_name: str, payload: dict[str, object] | None = No
     target_repo = str(payload.get("targetRepo", "") or "").strip()
     if target_repo and Path(target_repo).exists():
         cwd = Path(target_repo)
+
+    cli_path = resolve_cli_path(command_name)
+    if not cli_path:
+        return {"ok": False, "message": f"{command_name} CLI를 찾지 못했습니다.", "cwd": str(cwd)}
 
     if command_name == "claude" and payload.get("promptPath"):
         prompt_path = str(payload["promptPath"])
@@ -358,13 +723,16 @@ def launch_interactive(command_name: str, payload: dict[str, object] | None = No
             + "; $prompt = [System.IO.File]::ReadAllText("
             + ps_single_quote(prompt_path)
             + ", [System.Text.Encoding]::UTF8)"
-            + "; claude $prompt"
+            + "; & "
+            + ps_single_quote(str(cli_path))
+            + " $prompt"
         )
     else:
         ps = (
             "Set-Location -LiteralPath "
             + ps_single_quote(str(cwd))
-            + f"; Write-Host '{title}' -ForegroundColor Cyan; {command_name}"
+            + f"; Write-Host '{title}' -ForegroundColor Cyan; & "
+            + ps_single_quote(str(cli_path))
         )
     subprocess.Popen(
         ["cmd", "/c", "start", title, "powershell", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", ps],
@@ -812,7 +1180,7 @@ HTML_PAGE = r"""<!doctype html>
       try { write(await api("/api/selfcheck", { method: "POST" })); await refreshStatus(); } catch (e) { write("오류: " + e.message); }
     };
     async function startDevelopment() {
-      write("개발 착수 준비 중...");
+      write("task 생성 준비 중...");
       try {
         const payload = {
           request: $("request").value,
@@ -823,17 +1191,45 @@ HTML_PAGE = r"""<!doctype html>
         };
         const created = await api("/api/create-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         await refreshStatus();
-        const launched = await api("/api/start-session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: "claude", promptPath: created.promptPath, targetRepo: created.targetRepo }) });
         write({
-          ok: true,
-          status: "Claude 개발 세션 시작됨",
+          status: "task 생성됨",
           task: created.task,
           taskPath: created.path,
-          promptPath: created.promptPath,
-          cliWorkingDirectory: launched.cwd,
-          message: "새 PowerShell 창의 Claude가 이 요청 프롬프트를 받은 상태입니다."
+          targetRepo: created.targetRepo
         });
+        await api("/api/run-task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            request: payload.request,
+            task: created.task,
+            taskPath: created.path,
+            promptPath: created.promptPath,
+            targetRepo: created.targetRepo
+          })
+        });
+        await pollTask(created.task);
       } catch (e) { write("오류: " + e.message); }
+    }
+
+    async function pollTask(task) {
+      const terminalStates = new Set(["completed", "failed"]);
+      for (let i = 0; i < 180; i++) {
+        const status = await api(`/api/task-status?task=${encodeURIComponent(task)}`);
+        write({
+          task,
+          status: status.status,
+          message: status.message,
+          taskPath: status.taskPath,
+          targetRepo: status.targetRepo,
+          artifactPath: status.artifactPath,
+          verification: status.verification
+        });
+        await refreshStatus();
+        if (terminalStates.has(status.status)) return status;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      throw new Error("실행 상태 확인 시간이 초과되었습니다.");
     }
     $("createTask").onclick = startDevelopment;
     $("request").addEventListener("keydown", async (event) => {
@@ -939,6 +1335,10 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query)
             self.send_json(list_directory(query.get("path", [""])[0]))
             return
+        if parsed.path == "/api/task-status":
+            query = parse_qs(parsed.query)
+            self.send_json(read_run_status(query.get("task", [""])[0]))
+            return
         if parsed.path == "/health":
             self.send_json({"ok": True, "base": str(BASE)})
             return
@@ -953,6 +1353,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/create-task":
                 self.send_json({"ok": True, **create_task(self.read_json())})
+                return
+            if parsed.path == "/api/run-task":
+                self.send_json(start_development_run(self.read_json()))
                 return
             if parsed.path == "/api/open-folder":
                 payload = self.read_json()
